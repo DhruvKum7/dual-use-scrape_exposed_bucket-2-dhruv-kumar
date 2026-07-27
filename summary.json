@@ -1,0 +1,10 @@
+{
+  "summary": {
+    "crawl_depth": 3,
+    "discovered_bucket_count": 0,
+    "checked_bucket_count": 0,
+    "accessible_bucket_count": 0,
+    "all_checks_local_only": true
+  },
+  "buckets": []
+}
