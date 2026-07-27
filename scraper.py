@@ -1,8 +1,10 @@
 from __future__ import annotations
-
+import argparse
+import re
 import argparse
 import json
 import re
+from dataclasses import dataclass
 from collections import deque
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -14,6 +16,22 @@ from urllib.request import Request, urlopen
 
 
 ALLOWED_HOSTS = {"localhost", "127.0.0.1"}
+
+LOCAL_ENDPOINT_PATTERN = re.compile(
+    r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?/"
+    r"([a-z0-9][a-z0-9.-]{1,62})"
+    r"(?:/[^\s\"'<>]*)?",
+    re.IGNORECASE,
+)
+
+BUCKET_ASSIGNMENT_PATTERN = re.compile(
+    r"""
+    (?:bucketName|bucket_name|bucket)
+    \s*[:=]\s*
+    ["']([a-z0-9][a-z0-9.-]{1,62})["']
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 
 URL_PATTERN = re.compile(
     r"https?://(?:localhost|127\.0\.0\.1)(?::\d+)?/[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+"
@@ -39,7 +57,7 @@ LOCAL_ENDPOINT_PATTERN = re.compile(
 class BucketFinding:
     bucket_name: str
     endpoint: str
-
+    source_url: str
 
 class LinkParser(HTMLParser):
     def __init__(self) -> None:
@@ -100,6 +118,42 @@ def extract_links(html: str, base_url: str) -> set[str]:
             links.add(absolute_url)
 
     return links
+
+def extract_bucket_findings(
+    html: str,
+    source_url: str,
+) -> set[BucketFinding]:
+    """Extract probable bucket names and local endpoints from HTML."""
+
+    findings: set[BucketFinding] = set()
+    endpoint_by_bucket: dict[str, str] = {}
+
+    for match in LOCAL_ENDPOINT_PATTERN.finditer(html):
+        endpoint = match.group(0).rstrip(".,;)'\"}]")
+        bucket_name = match.group(1)
+
+        endpoint_by_bucket.setdefault(bucket_name, endpoint)
+
+        findings.add(
+            BucketFinding(
+                bucket_name=bucket_name,
+                endpoint=endpoint,
+                source_url=source_url,
+            )
+        )
+
+    for match in BUCKET_ASSIGNMENT_PATTERN.finditer(html):
+        bucket_name = match.group(1)
+
+        findings.add(
+            BucketFinding(
+                bucket_name=bucket_name,
+                endpoint=endpoint_by_bucket.get(bucket_name, ""),
+                source_url=source_url,
+            )
+        )
+
+    return findings
 
 
 def extract_bucket_findings(
@@ -175,9 +229,11 @@ def crawl(
     start_url: str,
     max_depth: int = 3,
 ) -> tuple[set[str], set[BucketFinding]]:
+    """Crawl local pages and collect probable bucket references."""
+
     if not is_allowed_url(start_url):
         raise ValueError(
-            "The crawler only accepts localhost or 127.0.0.1 targets."
+            "Only localhost or 127.0.0.1 targets are allowed."
         )
 
     queue: deque[tuple[str, int]] = deque([(start_url, 0)])
@@ -191,11 +247,12 @@ def crawl(
             continue
 
         visited.add(current_url)
+        print(f"[depth={depth}] Visiting: {current_url}")
 
         try:
             html = fetch_page(current_url)
         except (HTTPError, URLError, TimeoutError, ValueError) as error:
-            print(f"[warning] Could not fetch {current_url}: {error}")
+            print(f"[warning] Failed to fetch {current_url}: {error}")
             continue
 
         findings.update(
@@ -208,12 +265,11 @@ def crawl(
         if depth == max_depth:
             continue
 
-        for link in extract_links(html, current_url):
+        for link in sorted(extract_links(html, current_url)):
             if link not in visited:
                 queue.append((link, depth + 1))
 
     return visited, findings
-
 
 def write_results(
     findings: Iterable[BucketFinding],
