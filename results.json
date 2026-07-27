@@ -1,23 +1,7 @@
 {
   "scraper": {
     "depth": 3,
-    "discovered_buckets": [
-      {
-        "bucket_name": "creative-studio-assets",
-        "endpoint": "http://127.0.0.1:4566/creative-studio-assets",
-        "source_url": "http://localhost:8000/index.html"
-      },
-      {
-        "bucket_name": "creative-studio-assets",
-        "endpoint": "http://127.0.0.1:4566/creative-studio-assets/sample-image.jpg",
-        "source_url": "http://localhost:8000/gallery.html"
-      },
-      {
-        "bucket_name": "creative-studio-assets",
-        "endpoint": "http://localhost:4566/creative-studio-assets",
-        "source_url": "http://localhost:8000/config.html"
-      }
-    ]
+    "discovered_buckets": []
   },
   "checker": {
     "buckets": []

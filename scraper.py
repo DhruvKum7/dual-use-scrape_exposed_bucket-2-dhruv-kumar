@@ -259,21 +259,41 @@ def write_results(
     depth: int,
     output_path: Path,
 ) -> None:
-    discovered_buckets = [
-        {
-            "bucket_name": finding.bucket_name,
-            "endpoint": finding.endpoint,
-            "source_url": finding.source_url,
-        }
-        for finding in sorted(
-            findings,
-            key=lambda item: (
-                item.bucket_name,
-                item.endpoint,
-                item.source_url,
-            ),
+    """Write findings while merging duplicate bucket names."""
+
+    bucket_map: dict[str, dict[str, set[str]]] = {}
+
+    for finding in findings:
+        if finding.bucket_name not in bucket_map:
+            bucket_map[finding.bucket_name] = {
+                "endpoints": set(),
+                "source_urls": set(),
+            }
+
+        if finding.endpoint:
+            bucket_map[finding.bucket_name]["endpoints"].add(
+                finding.endpoint
+            )
+
+        if finding.source_url:
+            bucket_map[finding.bucket_name]["source_urls"].add(
+                finding.source_url
+            )
+
+    discovered_buckets = []
+
+    for bucket_name in sorted(bucket_map):
+        discovered_buckets.append(
+            {
+                "bucket_name": bucket_name,
+                "endpoints": sorted(
+                    bucket_map[bucket_name]["endpoints"]
+                ),
+                "source_urls": sorted(
+                    bucket_map[bucket_name]["source_urls"]
+                ),
+            }
         )
-    ]
 
     output = {
         "scraper": {
@@ -284,11 +304,6 @@ def write_results(
             "buckets": [],
         },
     }
-
-    output_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
 
     output_path.write_text(
         json.dumps(output, indent=2),
